@@ -1,0 +1,12 @@
+# Credenciales - nunca subir a GitHub
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+
+# R
+.Rhistory
+.RData
