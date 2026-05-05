@@ -59,7 +59,7 @@ def preparar_serie(df_filtrado):
     assert serie['ds'].nunique() == len(serie), "Hay fechas duplicadas"
     return serie
 
-def entrenar_y_predecir(serie, nombre):
+def entrenar_y_predecir(serie, nombre, paises=None):
     if len(serie) < 30:
         print(f"[{nombre}] Datos insuficientes ({len(serie)} dias), se omite.")
         return None
@@ -70,7 +70,8 @@ def entrenar_y_predecir(serie, nombre):
         daily_seasonality       = False,
         changepoint_prior_scale = 0.03
     )
-    modelo.add_country_holidays(country_name='CO')
+    for pais in (paises or ['CO']):
+        modelo.add_country_holidays(country_name=pais)
     modelo.add_regressor('fin_mes')
     modelo.fit(serie)
 
@@ -193,7 +194,8 @@ def f_dlocal(df):
     )
     cond2 = (
         (df['cod_provider'] == 'MANUAL') &
-        (df['des_pay_flow'] == 'DLOCAL')
+        (df['des_pay_flow'] == 'DLOCAL') &
+        ~((df['des_dest_ent_country'] == 'GUATEMALA') & (df['cod_dest_acc_currency'] == 'GTQ'))
     )
     return df[cond1 | cond2]
 
@@ -206,27 +208,28 @@ def f_transfermate(df):
 
 # ── 5. REGISTRO DE PROVEEDORES ────────────────────────────────────────────────
 PROVEEDORES = {
-    "bamboo_cobre_col_mex" : ("Bamboo/Cobre - Colombia + Mexico", f_bamboo_cobre_col_mex),
-    "bamboo_brasil"        : ("Bamboo - Brasil",                  f_bamboo_brasil),
-    "bamboo_peru_uru_usd"  : ("Bamboo - Peru + Uruguay USD",      f_bamboo_peru_uru_usd),
-    "bamboo_peru_local"    : ("Bamboo - Peru Local",              f_bamboo_peru_local),
-    "zamp"                 : ("ZAMP",                             f_zamp),
-    "bvnk"                 : ("BVNK",                             f_bvnk),
-    "zinli"                : ("Zinli",                            f_zinli),
-    "payoneer"             : ("Payoneer",                         f_payoneer),
-    "paysend"              : ("Paysend",                          f_paysend),
-    "astropay_usd"         : ("Astropay USD",                     f_astropay_usd),
-    "local_payment"        : ("Local Payment",                    f_local_payment),
-    "thunes"               : ("Thunes",                           f_thunes),
-    "wise"                 : ("Wise",                             f_wise),
-    "dlocal"               : ("DLocal",                           f_dlocal),
-    "transfermate"         : ("Transfermate",                     f_transfermate),
+    #  key                  : (nombre,                            filtro,                paises festivos)
+    "bamboo_cobre_col_mex" : ("Bamboo/Cobre - Colombia + Mexico", f_bamboo_cobre_col_mex, ['CO', 'MX', 'US']),
+    "bamboo_brasil"        : ("Bamboo - Brasil",                  f_bamboo_brasil,        ['US', 'BR']),
+    "bamboo_peru_uru_usd"  : ("Bamboo - Peru + Uruguay USD",      f_bamboo_peru_uru_usd,  ['US', 'PE']),
+    "bamboo_peru_local"    : ("Bamboo - Peru Local",              f_bamboo_peru_local,    ['US', 'PE']),
+    "zamp"                 : ("ZAMP",                             f_zamp,                 ['US']),
+    "bvnk"                 : ("BVNK",                             f_bvnk,                 ['US', 'UK']),
+    "zinli"                : ("Zinli",                            f_zinli,                ['US']),
+    "payoneer"             : ("Payoneer",                         f_payoneer,             ['US']),
+    "paysend"              : ("Paysend",                          f_paysend,              ['US', 'UK']),
+    "astropay_usd"         : ("Astropay USD",                     f_astropay_usd,         ['US']),
+    "local_payment"        : ("Local Payment",                    f_local_payment,        ['US', 'PA', 'MX', 'BR', 'PE']),
+    "thunes"               : ("Thunes",                           f_thunes,               ['US', 'UK']),
+    "wise"                 : ("Wise",                             f_wise,                 ['US', 'UK']),
+    "dlocal"               : ("DLocal",                           f_dlocal,               ['US', 'BR', 'MX', 'PE']),
+    "transfermate"         : ("Transfermate",                     f_transfermate,         ['US', 'UK']),
 }
 
 # ── 6. EJECUCIÓN POR PROVEEDOR ────────────────────────────────────────────────
 resultados = {}
 
-for key, (nombre, filtro_fn) in PROVEEDORES.items():
+for key, (nombre, filtro_fn, paises) in PROVEEDORES.items():
     print(f"\n{'='*50}")
     print(f"Procesando: {nombre}")
 
@@ -236,8 +239,8 @@ for key, (nombre, filtro_fn) in PROVEEDORES.items():
         print(f"  Sin datos, se omite.")
         continue
 
-    serie   = preparar_serie(df_filtrado)
-    forecast = entrenar_y_predecir(serie, nombre)
+    serie    = preparar_serie(df_filtrado)
+    forecast = entrenar_y_predecir(serie, nombre, paises)
 
     if forecast is None:
         continue
@@ -266,7 +269,7 @@ print(f"Completado: {len(resultados)} proveedores procesados.")
 nombre_archivo = f"forecast_{date.today().strftime('%Y-%m-%d')}.xlsx"
 
 with pd.ExcelWriter(nombre_archivo, engine='openpyxl') as writer:
-    for key, (nombre, _) in PROVEEDORES.items():
+    for key, (nombre, _, __) in PROVEEDORES.items():
         if key not in resultados:
             continue
         df_excel = resultados[key].copy()
